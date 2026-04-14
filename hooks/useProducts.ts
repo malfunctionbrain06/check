@@ -5,7 +5,7 @@ interface Product {
   id?: string;
   name: string;
   code: string;
-  price: string;
+  price: number;
   description: string;
   image: string;
   category?: string;
@@ -18,6 +18,8 @@ interface UseProductsReturn {
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
+  deleteProduct: (id: string) => Promise<boolean>;
+  addProduct: (product: Omit<Product, '_id' | 'id'>) => Promise<boolean>;
 }
 
 export function useProducts(): UseProductsReturn {
@@ -30,12 +32,7 @@ export function useProducts(): UseProductsReturn {
       setLoading(true);
       setError(null);
 
-      const response = await fetch('/api/products', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await fetch('/api/products');
 
       if (!response.ok) {
         throw new Error('Failed to fetch products');
@@ -44,7 +41,6 @@ export function useProducts(): UseProductsReturn {
       const data = await response.json();
 
       if (data.success) {
-        // Map MongoDB _id to id for consistency
         const mappedProducts = data.data.map((product: Product) => ({
           ...product,
           id: product._id || product.id,
@@ -61,6 +57,48 @@ export function useProducts(): UseProductsReturn {
     }
   };
 
+  const addProduct = async (product: Omit<Product, '_id' | 'id'>) => {
+    try {
+      const response = await fetch('/api/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(product),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to add product');
+      }
+
+      await fetchProducts();
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  };
+
+  const deleteProduct = async (id: string) => {
+    try {
+      const response = await fetch(`/api/products/${id}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to delete product');
+      }
+
+      setProducts((prev) => prev.filter((p) => p.id !== id));
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  };
+
   useEffect(() => {
     fetchProducts();
   }, []);
@@ -70,5 +108,7 @@ export function useProducts(): UseProductsReturn {
     loading,
     error,
     refetch: fetchProducts,
+    deleteProduct,
+    addProduct,
   };
 }

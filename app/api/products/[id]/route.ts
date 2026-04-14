@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import mongoose from 'mongoose';
 import connectDB from '@/lib/db';
-import { Product } from '@/lib/models/Product';
+import Product from '@/lib/models/Product';
 import { validateAdminSession, getAdminSessionFromRequest } from '@/lib/auth';
 
 export async function DELETE(
@@ -8,60 +9,45 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    // Check admin authentication
     const sessionToken = getAdminSessionFromRequest(request);
+
     if (!validateAdminSession(sessionToken)) {
       return NextResponse.json(
-        {
-          success: false,
-          error: 'Unauthorized: Admin authentication required',
-        },
+        { success: false, error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
     const { id } = params;
 
-    // Validate ID format
-    if (!id || typeof id !== 'string') {
+    // Proper MongoDB ID validation
+    if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json(
-        {
-          success: false,
-          error: 'Invalid product ID',
-        },
+        { success: false, error: 'Invalid product ID format' },
         { status: 400 }
       );
     }
 
     await connectDB();
 
-    const product = await Product.findByIdAndDelete(id);
+    const deleted = await Product.findByIdAndDelete(id);
 
-    if (!product) {
+    if (!deleted) {
       return NextResponse.json(
-        {
-          success: false,
-          error: 'Product not found',
-        },
+        { success: false, error: 'Product not found' },
         { status: 404 }
       );
     }
 
-    return NextResponse.json(
-      {
-        success: true,
-        message: 'Product deleted successfully',
-        data: product,
-      },
-      { status: 200 }
-    );
+    return NextResponse.json({
+      success: true,
+      message: 'Product deleted successfully',
+    });
   } catch (error) {
-    console.error('Error deleting product:', error);
+    console.error('Delete error:', error);
+
     return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to delete product',
-      },
+      { success: false, error: 'Failed to delete product' },
       { status: 500 }
     );
   }

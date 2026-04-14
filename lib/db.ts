@@ -1,40 +1,43 @@
-import mongoose, { Connection } from 'mongoose';
+import mongoose from 'mongoose';
 
-// Extend global namespace to avoid TypeScript errors
-declare global {
-  var mongooseConnection: Connection | null;
+const MONGODB_URI = process.env.MONGODB_URI as string;
+
+if (!MONGODB_URI) {
+  throw new Error('Please define the MONGODB_URI environment variable in .env.local');
 }
 
-let cached = global.mongooseConnection;
+/**
+ * Global caching for Next.js (prevents multiple connections in dev)
+ */
+let cached = (global as any).mongoose;
 
-export async function connectDB(): Promise<Connection> {
-  const MONGODB_URI = process.env.MONGODB_URI;
+if (!cached) {
+  cached = (global as any).mongoose = {
+    conn: null,
+    promise: null,
+  };
+}
 
-  if (!MONGODB_URI) {
-    throw new Error(
-      'Please define the MONGODB_URI environment variable inside .env.local'
-    );
+async function connectDB() {
+  if (cached.conn) {
+    return cached.conn;
   }
 
-  // Return cached connection if it exists and is connected
-  if (cached && mongoose.connection.readyState === 1) {
-    console.log('Using cached MongoDB connection');
-    return cached;
+  if (!cached.promise) {
+    cached.promise = mongoose.connect(MONGODB_URI, {
+      bufferCommands: false,
+      maxPoolSize: 10,
+    });
   }
 
   try {
-    const conn = await mongoose.connect(MONGODB_URI, {
-      maxPoolSize: 10,
-      minPoolSize: 5,
-    });
-
-    cached = conn.connection;
-    console.log('MongoDB connected successfully');
-    return cached;
+    cached.conn = await cached.promise;
   } catch (error) {
-    console.error('MongoDB connection error:', error);
+    cached.promise = null;
     throw error;
   }
+
+  return cached.conn;
 }
 
 export default connectDB;
